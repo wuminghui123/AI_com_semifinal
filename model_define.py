@@ -19,31 +19,43 @@ from tensorflow.keras import layers
     #return x
 
 def MyModel(x):
-    x = layers.Dense(256, activation='linear')(x)
-    #x = layers.BatchNormalization()(x)
-    #x = layers.LeakyReLU()(x)
-    x_ini = layers.Reshape((4, 32, 2))(x)
-    #x_ini = tf.reshape(x, (tf.shape(x)[0],4,4,64))
-
+    ini = x + 0
+    #x_ini = layers.Reshape((1, 256, 8))(x)
+    Y_pilot = x[:,0,:,0:4]
+    x = layers.Flatten()(Y_pilot)
+    x = layers.Dense(4096, activation='linear')(x)
+    x = layers.BatchNormalization()(x)
+    x = Mish(x)
+    x_ini = layers.Reshape((1, 256, 16))(x)
     for i in range(2):
-        x = layers.Conv2D(128, 3, padding = 'SAME', activation='linear')(x_ini)
+        x = layers.Conv2D(512, (1,7), padding = 'SAME', activation='linear')(x_ini)
+        x = layers.BatchNormalization()(x)
+        x = Mish(x)
+        x = layers.Conv2D(1024,(1,7), padding = 'SAME',activation="linear")(x)
+        x = layers.BatchNormalization()(x)
+        x = Mish(x)
+        x = layers.Conv2D(16, (1,7), padding = 'SAME',activation="linear")(x)
+        x = layers.BatchNormalization()(x)
+        x_ini = keras.layers.Add()([x_ini, x])
+        x_ini = Mish(x_ini)
+    x_ini = tf.concat([x_ini,ini[:,:,:,4:8]],3)
+    for i in range(2):
+        x = layers.Conv2D(512, (1,7), padding = 'SAME', activation='linear')(x_ini)
         x = layers.BatchNormalization()(x)
         #x = layers.LeakyReLU()(x)
         x = Mish(x)
-        x = layers.Conv2D(256,3, padding = 'SAME',activation="linear")(x)
+        x = layers.Conv2D(1024,(1,7), padding = 'SAME',activation="linear")(x)
         x = layers.BatchNormalization()(x)
         #x = layers.LeakyReLU()(x)
         x = Mish(x)
-        x = layers.Conv2D(2, 3, padding = 'SAME',activation="linear")(x)
+        x = layers.Conv2D(20, (1,7), padding = 'SAME',activation="linear")(x)
         x = layers.BatchNormalization()(x)
         x_ini = keras.layers.Add()([x_ini, x])
         #x_ini = layers.LeakyReLU()(x_ini)
         x_ini = Mish(x_ini)
-
-
-    decoder_output = layers.Conv2D(2, 3, padding = 'SAME',activation="linear")(x_ini)
-
-    return decoder_output
+    x = layers.Flatten()(x_ini)
+    x = layers.Dense(units=1024, activation='sigmoid')(x)
+    return x
 
 
 

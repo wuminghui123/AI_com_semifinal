@@ -1,3 +1,6 @@
+import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # 使用第二块GPU（从0开始）
 import tensorflow as tf
 from tensorflow import keras
 from utils import *
@@ -5,36 +8,36 @@ import struct
 
 from model_define import MyModel,NMSE_loss
 
-mode=0
-SNRdb=10
-Pilotnum=8
+#mode=0
+#SNRdb=10
+Pilotnum=32
 ###########################以下仅为信道数据载入和链路使用范例############
 
-data1=open('H.bin','rb')
-H1=struct.unpack('f'*2*2*2*32*320000,data1.read(4*2*2*2*32*320000))
-H1=np.reshape(H1,[320000,2,4,32])
-H=H1[:,1,:,:]+1j*H1[:,0,:,:]
+#data1=open('H.bin','rb')
+#H1=struct.unpack('f'*2*2*2*32*320000,data1.read(4*2*2*2*32*320000))
+#H1=np.reshape(H1,[320000,2,4,32])
+#H=H1[:,1,:,:]+1j*H1[:,0,:,:]
 
-Htest=H[300000:,:,:]
-H=H[:300000,:,:]
+#Htest=H[300000:,:,:]
+#H=H[:300000,:,:]
 
 
 #model = keras.MyModel() #定义自己的模型
 # Model construction
 # encoder model
-model_input = keras.Input(shape=(1024))
+model_input = keras.Input(shape=(1,256,8))
 model_output = MyModel(model_input)
 model = keras.Model(inputs=model_input, outputs=model_output)
 
 model.summary()
-#model.compile(
-#    optimizer=keras.optimizers.Adam(),  # Optimizer
-#    # Loss function to minimize
-#    loss='binary_crossentropy',
+model.compile(
+    optimizer=keras.optimizers.Adam(),  # Optimizer
+    # Loss function to minimize
+    loss='binary_crossentropy',
     # List of metrics to monitor
-#    metrics=['binary_accuracy'],
-#)
-model.compile(optimizer='adam', loss=NMSE_loss)
+    metrics=['binary_accuracy'],
+)
+#model.compile(optimizer='adam', loss=NMSE_loss)
 ####################使用链路和信道数据产生训练数据##########
 def generator(batch,H):
     while True:
@@ -92,8 +95,55 @@ def generatorXY(batch, H):
 #Y, X = generatorXY(100000, H)
 #####训练#########
 #model.fit_generator(generator(1000,H),steps_per_epoch=50,epochs=2000)
-HH = np.load('H_'+str(Pilotnum)+'.npy')
-Y_Pilot = np.load('Y_pilot_'+str(Pilotnum)+'.npy')
+N = 600000
+X = np.load('X_'+str(Pilotnum)+'_'+str(N)+'N'+'.npy')
+Y = np.load('Y_'+str(Pilotnum)+'_'+str(N)+'N'+'.npy')
+Y_mat = np.transpose(np.reshape(Y,[N,256,8]),[0,2,1])
+Y = np.reshape(Y,[N,1,256,8])
+
+Y_t = np.zeros([N,1,256,8])
+Y_t[:,0,:,0] = Y_mat[:,0,:]
+Y_t[:,0,:,1] = Y_mat[:,1,:]
+Y_t[:,0,:,2] = Y_mat[:,4,:]
+Y_t[:,0,:,3] = Y_mat[:,5,:]
+
+Y_t[:,0,:,4] = Y_mat[:,2,:]
+Y_t[:,0,:,5] = Y_mat[:,3,:]
+Y_t[:,0,:,6] = Y_mat[:,6,:]
+Y_t[:,0,:,7] = Y_mat[:,7,:]
+Y = Y_t
+#Y_antena0 = Y_mat[:,0:4,:]
+
+#Y_antena0_pilot = Y_antena0[:,0,:]+1j*Y_antena0[:,1,:]
+
+
+#Y_antena1 = Y_mat[:,4:8,:]
+#Y_antena1_pilot = Y_antena1[:,0,:]+1j*Y_antena1[:,1,:]
+
+
+#Y_antena0_data = Y_antena0[:,2,:]+1j*Y_antena0[:,3,:]
+#Y_antena1_data = Y_antena1[:,2,:]+1j*Y_antena1[:,3,:]
+
+#Y_antena0_pilot_t = np.fft.ifft(Y_antena0_pilot)
+#Y_antena1_pilot_t = np.fft.ifft(Y_antena1_pilot)
+#Y_antena0_data_t  = np.fft.ifft(Y_antena0_data)
+#Y_antena1_data_t  = np.fft.ifft(Y_antena1_data)
+
+#Y_t = np.zeros([N,1,256,8])
+#Y_t[:,0,:,0] = np.real(Y_antena0_pilot_t)
+#Y_t[:,0,:,1] = np.imag(Y_antena0_pilot_t)
+#Y_t[:,0,:,2] = np.real(Y_antena1_pilot_t)
+#Y_t[:,0,:,3] = np.imag(Y_antena1_pilot_t)
+
+#Y_t[:,0,:,4] = np.real(Y_antena0_data_t)
+#Y_t[:,0,:,5] = np.imag(Y_antena0_data_t)
+#Y_t[:,0,:,6] = np.real(Y_antena1_data_t)
+#Y_t[:,0,:,7] = np.imag(Y_antena1_data_t)
+
+
+#Y = np.reshape(Y,[Y.shape[0],1,256,8])
+#Y = np.zeros([N,2048])
+
 #model.fit(x=Y_Pilot, y=HH, batch_size=128, epochs=2000, validation_split=0.1)
 
 model.optimizer.lr = 0.001
@@ -109,8 +159,10 @@ checkpoint = keras.callbacks.ModelCheckpoint(".model_"+str(Pilotnum)+".best.h5",
                                              save_best_only=True, save_weights_only=True, mode='auto', period=1)
 callbacks_list = [checkpoint,change_LR]
 
-model.fit(x=Y_Pilot, y=HH, batch_size=128, epochs=2000, validation_split=0.1,callbacks=callbacks_list)
-
+#model.fit(x=Y_Pilot, y=HH, batch_size=128, epochs=2000, validation_split=0.1,callbacks=callbacks_list)
+print(Y.shape)
+print(X.shape)
+model.fit(x=Y, y=X, batch_size=128, epochs=2000, validation_split=0.1,callbacks=callbacks_list)
 #np.savetxt('Y_1.csv', Y, delimiter=',')
 #X_1 = np.array(np.floor(X + 0.5), dtype=np.bool)
 #X_1.tofile('X_1.bin')
